@@ -98,15 +98,15 @@ function stochastic_trajectory(amax; d = 3, tmax=1.0, Δt=0.01,
 end
 
 
-# function rotate(p)
-#     anim = Animation()
-#     plot!(p, legend=false)
-#     for i in range(0, stop = 359, step = 10)
-#         fram = Plots.plot(p, camera=(i, 10))
-#         frame(anim, fram)
-#     end
-#     gif(anim, fps=10)
-# end 
+function rotate(p)
+    anim = Animation()
+    plot!(p, legend=false)
+    for i in range(0, stop = 359, step = 10)
+        fram = Plots.plot(p, camera=(i, 10))
+        frame(anim, fram)
+    end
+    gif(anim, fps=10)
+end 
 
 
 using KernelDensity

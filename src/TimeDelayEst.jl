@@ -98,6 +98,37 @@ end
 
 
 
+function goertzel_hann(samples::Vector{Float64}, target_freq, sample_rate, window_length, start_at=1)
+    p = 2π*round(Int, (target_freq*window_length)/sample_rate) / window_length
+    a = 2/window_length
+    s, c = sincos(p)
+    d = 2*c
+
+    hann_window = DSP.hann(window_length)
+
+    z1, z2 = 0.0, 0.0
+
+    r = range(start=start_at, length=window_length)
+    window = samples[r] .* hann_window
+
+    for sample ∈ window
+        z0 = muladd(d, z1, sample-z2)
+        z2 = z1
+        z1 = z0
+    end
+    return muladd(z1, c, -z2)*a + *(z1, s, a)im
+end
+
+function goertzel_toa_estimate(samples::Vector{Float64}, freq, target_freq, offset; window_length=2^10, stride=1)
+    r = 1:stride:(length(samples) - window_length)
+    powers = map(r) do start_at
+        abs(goertzel_hann(samples, target_freq, freq, window_length, start_at))
+    end 
+    return argmax(powers) + offset
+end 
+
+
+
 
 
 function maximum_delays(coords, speed_of_sound; inflate=1.0) 

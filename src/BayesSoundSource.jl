@@ -11,8 +11,12 @@ export  distance,
         stochastic_trajectory
 
 include("Freq.jl")
-# export
-
+export tdoa_mle,
+        tdoa_mle_2d,
+        toa_mle,
+        toa_mle_2d
+        
+        
 include("Models.jl")
 export  FlatTrajPrior,  
         GPTrajPrior,

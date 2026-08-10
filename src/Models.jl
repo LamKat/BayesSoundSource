@@ -49,7 +49,7 @@ end
 
 @model function flat_prior(Z::Int, prior::FlatTrajPrior)
     # coords = Vector(undef, prior.dim)
-    coords = Matrix(undef, prior.dim, Z)
+    coords = Matrix(undef, Z, prior.dim)
 
     for d in 1:prior.dim
         lo, hi = prior.bounds[d]
@@ -69,7 +69,7 @@ end
 
 
 
-time_prior(Z::Int) = filldist(Flat(), Z)
+time_prior(Z::Int) = filldist(Turing.Flat(), Z)
 
 
 struct ConstVector{T}
@@ -173,10 +173,15 @@ end
 traj_length_from_chain(chn, dims) = Z = size(group(chn, "traj.coords"), 2) ÷ dims 
 
 function map_estimate(chn, dims)
-    traj = sample_traj(chn, dims)
-    map(1:dims) do d
-        map(kde_mode, eachrow(traj[:,d,:]))
+    Z = traj_length_from_chain(chn, dims)
+
+    m = Array{Float64}(undef, Z, dims)
+    for d ∈ 1:dims
+        for z ∈ 1:Z
+            m[z, d] = kde_mode(Array(group(chn, "traj.coords[$z, $d]")))
+        end 
     end 
+    return m 
 end 
 
 
