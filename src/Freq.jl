@@ -1,11 +1,28 @@
-# using ADTypes: AutoReverseDiff, AutoForwardDiff
 using LogExpFunctions
 
 using Optim: optimize, GradientDescent, BFGS, minimizer, Fminbox
 
 
+"""
+    stable_distance(a, b)
+
+Compute the Euclidean distance between vectors `a` and `b` with a small
+positive regularization term for numerical stability.
+
+The regularization prevents the distance from becoming exactly zero.
+"""
 stable_distance(a, b) = sqrt(sum(abs2, a .- b) + 1e-12)
 
+
+"""
+    tdoa_mle(xs, tdoa_set, speed_of_sound; y_init=[0.0, 0.0, 0.0])
+
+Estimate a 3D source position from time-difference-of-arrival (TDOA)
+measurements using nonlinear least squares.
+
+Returns a tuple `(ŷ, minimum)` containing the estimated source position and
+the minimized objective value.
+"""
 function tdoa_mle(xs, tdoa_set, speed_of_sound; y_init=[0.0, 0.0, 0.0])
 
     Q = pairwise_difference_matrix(length(xs))
@@ -31,6 +48,16 @@ function tdoa_mle(xs, tdoa_set, speed_of_sound; y_init=[0.0, 0.0, 0.0])
     return fixlogz(result.minimizer), result.minimum
 end
 
+
+
+"""
+    tdoa_mle_2d(xs, tdoa_measured, speed_of_sound; y_init=[0.0, 0.0])
+
+Estimate a 2D source position from time-difference-of-arrival (TDOA)
+measurements using nonlinear least squares.
+
+see tdoa_mle()
+"""
 function tdoa_mle_2d(xs, tdoa_measured, speed_of_sound; y_init=[0.0, 0.0])
     Q = pairwise_difference_matrix(length(xs))
     fixlogy(y) = [y[1], exp(y[2])]
@@ -55,7 +82,15 @@ function tdoa_mle_2d(xs, tdoa_measured, speed_of_sound; y_init=[0.0, 0.0])
 end
 
 
+"""
+    toa_mle(xs, toa_set, speed_of_sound; y_init=[0.0, 0.0, 0.0, 0.0])
 
+Estimate a 3D source position and common emission time from time-of-arrival
+(TOA) measurements using nonlinear least squares.
+
+Returns `(ŷ, t̂₀, minimum)`, containing the estimated source position,
+emission-time offset, and minimized objective value.
+"""
 function toa_mle(xs, toa_set, speed_of_sound; y_init=[0.0, 0.0, 0.0, 0.0])
     fixlogz(y) = [y[1], y[2], exp(y[3])]
 
@@ -80,6 +115,14 @@ function toa_mle(xs, toa_set, speed_of_sound; y_init=[0.0, 0.0, 0.0, 0.0])
     return fixlogz(result.minimizer[1:3]), result.minimizer[4], result.minimum
 end
 
+"""
+    toa_mle_2d(xs, toa_measured, speed_of_sound; y_init=[0.0, 0.0, 0.0])
+
+Estimate a 2D source position and common emission time from time-of-arrival
+(TOA) measurements using nonlinear least squares.
+
+see toa_mle()
+"""
 function toa_mle_2d(xs, toa_measured, speed_of_sound; y_init=[0.0, 0.0, 0.0])
 
     fixlogy(y) = [y[1], exp(y[2])]

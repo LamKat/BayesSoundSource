@@ -1,17 +1,33 @@
 using FFTW
 using DSP
 
+"""
+    PHAT(crosspow)
 
+Return the phase-transform (PHAT) weighting for a cross-power spectrum.
+"""
 PHAT(crosspow) = 1 ./ abs.(crosspow)
+
+"""
+    bandpass(low, high, freq)
+
+Construct a binary frequency-domain bandpass filter preserving only 
+frequencies between `low` and `high`.
+"""
 bandpass(low, high, freq) = (x) -> low .<= abs.(fftfreq(length(x), freq)) .<= high 
+
 constant(v) = (_) -> v
 
 function pad_zero(s, len::Integer)
     return vcat(s, zeros(len - length(s)))
 end
 
-## computes f ⋆ g using the a fft based convolution 
-## Returns an array from -len:len
+"""
+    GCC(f, g; θ=constant(1))
+
+Compute the generalized cross-correlation (GCC) of two equal-length signals
+using FFT-based convolution and weighting function `θ`.
+"""
 function GCC(f, g; θ = constant(1)) 
     @assert (length(f) == length(g)) "Attempting to convolute signals with differing length"
     signal_length = length(f)
@@ -32,6 +48,15 @@ end
 
 delays(len, step) = range(stop=step*(len/2 - 1), length=len, step=step)
 
+
+"""
+    GCC_maximum(f, g, freq, offset, max_delay=Inf, θ=constant(1))
+
+Estimate the delay corresponding to the maximum generalized cross-correlation
+between signals `f` and `g` with an `offset`.
+
+Returns the delay at the maximum correlation within the allowed interval.
+"""
 function GCC_maximum(f, g, freq, offset, max_delay=Inf, θ=constant(1))
     cc = GCC(f, g; θ=θ)
     λ = 1/freq
@@ -183,7 +208,16 @@ function ambiguous_paths(candidate_paths)
     return ambiguous
 end
 
+"""
+    candidate_event_paths(events, max_delays)
 
+Enumerate physically consistent candidate associations between events
+observed by multiple sensors.
+
+Returns `(ambiguous, candidate_paths)`, where `candidate_paths` contains the
+valid event associations and `ambiguous` marks paths sharing at least one
+event assignment with another candidate.
+"""
 function candidate_event_paths(events, max_delays)
     
     next_event(events, ptrs) = findmin(getindex.(events, ptrs))

@@ -9,11 +9,19 @@ using KernelDensity
 
 abstract type AbstractTrajPrior end
 
+"""
+    GPTrajPrior(N)
+
+Gaussian-process prior for an N-dimensional trajectory.
+
+The kernel length scale and amplitude, together with the observation
+noise scale, are inferred hierarchically by the Turing model.
+"""
 struct GPTrajPrior   <: AbstractTrajPrior 
-    dim::Int
+    N::Int
 end
-(prior::GPTrajPrior)(Z::Int, t=nothing) =
-    to_submodel(gp_prior(Z, t, prior))
+(prior::GPTrajPrior)(Z::Int, t=nothing) = to_submodel(gp_prior(Z, t, prior))
+
 @model function gp_prior(Z, t, prior::GPTrajPrior) 
     @assert !Base.isnothing(t) "GP trajectory prior requires emission time estimate"
     ℓ ~ Gamma(2,1)
@@ -25,31 +33,36 @@ end
     f = GP(k)
     f_ = f(t, σ_noise^2)
 
-    coords ~ filldist(f_, prior.dim)
+    coords ~ filldist(f_, prior.N)
 
     return coords
 end 
 
 
+"""
+    FlatTrajPrior(N, bounds)
 
+Independent uniform prior for an N-dimensional trajectory.
+
+`bounds[d]` gives the `(lower, upper)` interval for coordinate `d`. 
+"""
 struct FlatTrajPrior <: AbstractTrajPrior
-    dim::Int
+    N::Int
     bounds::Vector{Tuple{Float64,Float64}}
 
-    function FlatTrajPrior(dim::Int,
+    function FlatTrajPrior(N::Int,
                            bounds::Vector{Tuple{Float64,Float64}})
-        if length(bounds) != dim 
-            throw(ArgumentError("expected $dim bounds, got $(length(bounds))"))
+        if length(bounds) != N 
+            throw(ArgumentError("expected $N bounds, got $(length(bounds))"))
         end 
-        new(dim, bounds)
+        new(N, bounds)
     end
 end
 (prior::FlatTrajPrior)(Z::Int, t=nothing) =
     to_submodel(flat_prior(Z, prior))
 
 @model function flat_prior(Z::Int, prior::FlatTrajPrior)
-    # coords = Vector(undef, prior.dim)
-    coords = Matrix(undef, Z, prior.dim)
+    coords = Matrix(undef, Z, prior.N)
 
     for d in 1:prior.dim
         lo, hi = prior.bounds[d]
@@ -58,15 +71,6 @@ end
 
     return coords
 end
-
-
-
-
-
-
-
-
-
 
 
 time_prior(Z::Int) = filldist(Turing.Flat(), Z)
@@ -78,19 +82,28 @@ end
 
 Base.getindex(v::ConstVector, i::Int) = v.value
 
+"""
+    toa_tdoa_model(tdoa_obs, toa_obs, receiver_priors, traj_prior; kwargs...)
 
+Joint Bayesian model for TDOA and TOA observations along a trajectory.
+
+The model infers receiver locations, speed of sound, TOA and TDOA noise, 
+emission times, and latent source positions drawn from `traj_prior`.
+
+We assume all events are detected by all receivers. 
+"""
 @model function toa_tdoa_model(
     tdoa_obs,
     toa_obs,
     receiver_priors,
     traj_prior;
-    Qs = ConstVector(pairwise_difference_matrix(length(receiver_priors))),
     toa_noise_prior = Exponential(0.001),
     tdoa_noise_prior = Exponential(0.001),
     sos_prior = Normal(SPEED_OF_SOUND, 2.0))   
     
     @assert length(tdoa_obs) == length(toa_obs)
     Z = length(toa_obs)
+    Q = pairwise_difference_matrix(length(receiver_priors))
 
     receivers ~ arraydist(receiver_priors)
     sos ~ sos_prior
@@ -103,20 +116,31 @@ Base.getindex(v::ConstVector, i::Int) = v.value
         source = view(traj, z, :)
         delays = [distance(receiver, source) / sos for receiver in eachcol(receivers)]
 
-        tdoa_obs[z] ~ MvNormal(Qs[z] * delays, σ_tdoa)
+        tdoa_obs[z] ~ MvNormal(Q * delays, σ_tdoa)
         toa_obs[z] ~ MvNormal(t[z] .+ delays, σ_toa)
     end
 end
 
+
+"""
+    tdoa_model(tdoa_obs, receiver_priors, traj_prior; kwargs...)
+
+Bayesian model for TDOA observations along a trajectory.
+
+The model infers receiver locations, speed of sound, TDOA noise, 
+and latent source positions drawn from `traj_prior=FlatTrajPrior()`.
+
+We assume all events are detected by all receivers. 
+"""
 @model function tdoa_model(
     tdoa_obs,
     receiver_priors,
     traj_prior;
-    Qs = ConstVector(pairwise_difference_matrix(length(receiver_priors))),
     tdoa_noise_prior = Exponential(0.001),
     sos_prior = Normal(SPEED_OF_SOUND, 2.0))  
     
     Z = length(tdoa_obs)
+    Q = pairwise_difference_matrix(length(receiver_priors))
 
     receivers ~ arraydist(receiver_priors)
     sos ~ sos_prior
@@ -128,10 +152,20 @@ end
         source = view(traj, z, :)
         delays = [distance(receiver, source) / sos for receiver in eachcol(receivers)]
 
-        tdoa_obs[z] ~ MvNormal(Qs[z] * delays, σ_tdoa)
+        tdoa_obs[z] ~ MvNormal(Q * delays, σ_tdoa)
     end
 end
 
+"""
+    toa_model(toa_obs, receiver_priors, traj_prior; kwargs...)
+
+Bayesian model for trajectory localization using TOA observations only.
+
+The model infers receiver locations, speed of sound, TOA noise, 
+emission times, and latent source positions drawn from `traj_prior`.
+
+We assume all events are detected by all receivers. 
+"""
 @model function toa_model(
     toa_obs,
     receiver_priors,
@@ -156,7 +190,15 @@ end
 end
 
 
+"""
+    sample_traj(chn, dims, samples=length(chn))
 
+Extract posterior trajectory samples from an MCMC chain.
+
+Returns a `Z × dims × samples` array, where `Z` is the trajectory length,
+`dims` is the spatial dimensionality, and the final axis indexes sampled
+posterior trajectories.
+"""
 function sample_traj(chn, dims, samples=length(chn)) 
     chn_sm = sample(chn, samples)
     Z = traj_length_from_chain(chn, dims)
@@ -170,7 +212,13 @@ function sample_traj(chn, dims, samples=length(chn))
     return m 
 end 
 
-traj_length_from_chain(chn, dims) = Z = size(group(chn, "traj.coords"), 2) ÷ dims 
+"""
+    traj_length_from_chain(chn, dims)
+
+Infer the number of trajectory points (`Z`).
+"""
+traj_length_from_chain(chn, dims) = size(group(chn, "traj.coords"), 2) ÷ dims 
+
 
 function map_estimate(chn, dims)
     Z = traj_length_from_chain(chn, dims)
@@ -184,7 +232,13 @@ function map_estimate(chn, dims)
     return m 
 end 
 
+"""
+    spread(chn, dims)
 
+Estimate the posterior spatial spread from the mode at each trajectory point.
+
+Returns a vector of length `Z`, with one spread measure per trajectory point.
+"""
 function spread(chn, dims)
     Z = traj_length_from_chain(chn, dims)
     traj = sample_traj(chn, dims)

@@ -4,11 +4,12 @@ using Distributions
 # using Plots
 
 
+"""
+    distance(a, b)
 
+Compute the Euclidean distance between vectors `a` and `b`.
+"""
 @inline distance(a, b) = norm(a .- b)
-
-# distance(a, b) = sqrt(sum(abs2, a .- b) + 1e-12)
-
 
 function pairwise_difference_matrix(n::Int)
     pairs = [(i, j) for i in 1:n-1 for j in i+1:n]
@@ -18,6 +19,15 @@ end
 num_pairwise_differences(n::Int) = n * (n - 1) ÷ 2
 
 
+"""
+    synthetic_tdoa(positions, receivers, c, σ; seed=nothing)
+
+Generate synthetic time-difference-of-arrival (TDOA) observations for a
+sequence of source positions. Independent Gaussian noise 
+with standard deviation `σ` is added to each observation.
+
+Returns one TDOA observation vector per source position.
+"""
 function synthetic_tdoa(positions, receivers, c, σ; seed=nothing) 
     
     if seed !== nothing
@@ -39,7 +49,15 @@ function synthetic_tdoa(positions, receivers, c, σ; seed=nothing)
     end 
 end 
 
+"""
+    synthetic_toa(positions, event_times, receivers, c, σ; seed=nothing)
 
+Generate synthetic time-of-arrival (TOA) observations for a sequence of
+source positions and corresponding emission times. Independent Gaussian noise 
+with standard deviation `σ` is added to each observation.
+
+Returns one TOA observation vector per source position.
+"""
 function synthetic_toa(positions, event_times, receivers, c, σ; seed=nothing)
     @assert(length(positions) == length(event_times))
 
@@ -60,7 +78,15 @@ end
 
 
 
+"""
+    stochastic_trajectory(amax; d=3, tmax=1.0, Δt=0.01,
+                          x0=zeros(d), v0=zeros(d), seed=nothing)
 
+Simulate a trajectory with randomly varying acceleration.
+
+Returns `(times, positions)`, where `times` is the simulation time grid and
+`positions` contains the simulated position at each time step.
+"""
 function stochastic_trajectory(amax; d = 3, tmax=1.0, Δt=0.01,
                                x0=zeros(d), v0=zeros(d), seed=nothing)
 
@@ -109,12 +135,3 @@ function rotate(p)
 end 
 
 
-using KernelDensity
-using Optim
-
-function kde_mode(samples) 
-    kde_est = kde(samples)
-    f(x) = -pdf(kde_est, x[1]) 
-    result = optimize(f, [mean(samples)])
-    return Optim.minimizer(result)[1]
-end 
